@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width,initial-scale=1">
+
+<title>ENVIGUARD-X AI</title>
+
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 18px;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+main {
+  max-width: 1050px;
+  margin: auto;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+h1 {
+  margin-bottom: 7px;
+}
+
+.subtitle {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(210px,1fr));
+  gap: 15px;
+}
+
+.card {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 14px;
+  margin-bottom: 15px;
+}
+
+.label {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.value {
+  font-size: 34px;
+  font-weight: bold;
+  margin-top: 12px;
+}
+
+.blue {
+  color: #38bdf8;
+}
+
+.green {
+  color: #4ade80;
+}
+
+.orange {
+  color: #fb923c;
+}
+
+.warning {
+  display: none;
+  background: #991b1b;
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 18px;
+  font-weight: bold;
+}
+
+.error {
+  display: none;
+  background: #92400e;
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+canvas {
+  width: 100%;
+  height: 190px;
+  display: block;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.stat {
+  background: #334155;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.stat b {
+  display: block;
+  margin-top: 7px;
+}
+
+button {
+  background: #38bdf8;
+  color: #0f172a;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.status {
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 12px;
+}
+
+footer {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 20px;
+}
+
+</style>
+</head>
+
+<body>
+<main>
+
+<header>
+
+<h1>ENVIGUARD-X AI</h1>
+
+<div class="subtitle">
+Intelligent Environmental Monitoring
+</div>
+
+</header>
+
+<div id="warning" class="warning">
+HIGH TEMPERATURE ALERT!
+Check the monitored environment.
+</div>
+
+<div id="error" class="error">
+DHT22 sensor reading unavailable.
+</div>
+
+<div class="grid">
+
+<div class="card">
+
+<div class="label">Temperature</div>
+
+<div class="value blue" id="temp">--</div>
+
+</div>
+
+<div class="card">
+
+<div class="label">Humidity</div>
+
+<div class="value green" id="hum">--</div>
+
+</div>
+
+<div class="card">
+
+<div class="label">Comfort Level</div>
+
+<div class="value orange"
+id="comfort" style="font-size:23px">
+--
+</div>
+
+</div>
+
+<div class="card">
+
+<div class="label">Alert Status</div>
+
+<div class="value" id="alert"
+style="font-size:25px">
+--
+</div>
+
+</div>
+
+</div>
+
+<div class="grid">
+
+<div class="card">
+
+<h3>Temperature History</h3>
+
+<canvas id="tempGraph"></canvas>
+
+</div>
+
+<div class="card">
+
+<h3>Humidity History</h3>
+
+<canvas id="humGraph"></canvas>
+
+</div>
+
+</div>
+
+<div class="grid">
+
+<div class="card">
+
+<h3>Temperature Min / Max</h3>
+
+<div class="stats">
+
+<div class="stat">
+Minimum
+<b id="minTemp">--</b>
+</div>
+
+<div class="stat">
+Maximum
+<b id="maxTemp">--</b>
+</div>
+
+</div>
+
+</div>
+
+<div class="card">
+
+<h3>Humidity Min / Max</h3>
+
+<div class="stats">
+
+<div class="stat">
+Minimum
+<b id="minHum">--</b>
+</div>
+
+<div class="stat">
+Maximum
+<b id="maxHum">--</b>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="card">
+
+<h3>System Information</h3>
+
+<p>Device: ESP32-WROOM-32</p>
+<p>Sensor: DHT22</p>
+
+<p>Uptime:
+<b id="uptime">--</b>
+</p>
+
+<p>Connection:
+<b id="connection">Connecting...</b>
+</p>
+
+<p>
+<button onclick="downloadCSV()">
+Download CSV
+</button>
+</p>
+
+</div>
+
+<footer>
+ENVIGUARD-X AI | Phase 1 Prototype
+</footer>
+
+</main>
+
+<script>
+
+const MAX_POINTS = 60;
+
+let tempHistory = [];
+let humHistory = [];
+let records = [];
+
+function fmt(value,unit) {
+
+  return value === null
+    ? "--"
+    : Number(value).toFixed(1)+unit;
+}
+
+function drawGraph(id,values,color) {
+
+  const canvas=document.getElementById(id);
+  const ctx=canvas.getContext("2d");
+
+  const w=canvas.clientWidth;
+  const h=190;
+  const dpr=window.devicePixelRatio||1;
+
+  canvas.width=Math.round(w*dpr);
+  canvas.height=Math.round(h*dpr);
+
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+
+  if(values.length===0) {
+
+    ctx.fillStyle="#94a3b8";
+    ctx.font="13px Arial";
+
+    ctx.fillText(
+      "Waiting for readings...",
+      12,90
+    );
+
+    return;
+  }
+
+  let low=Math.min(...values);
+  let high=Math.max(...values);
+
+  if(high-low<2) {
+
+    low-=1;
+    high+=1;
+
+  } else {
+
+    const padding=(high-low)*0.15;
+
+    low-=padding;
+    high+=padding;
+  }
+
+  const left=42;
+  const right=w-12;
+  const top=12;
+  const bottom=160;
+
+  ctx.strokeStyle="#334155";
+  ctx.lineWidth=1;
+
+  ctx.font="11px Arial";
+  ctx.fillStyle="#94a3b8";
+
+  for(let i=0;i<=4;i++) {
+
+    const y=top+(bottom-top)*i/4;
+
+    ctx.beginPath();
+    ctx.moveTo(left,y);
+    ctx.lineTo(right,y);
+    ctx.stroke();
+
+    const label=high-(high-low)*i/4;
+
+    ctx.fillText(
+      label.toFixed(1),
+      2,y+4
+    );
+  }
+
+  ctx.strokeStyle=color;
+  ctx.lineWidth=2.5;
+  ctx.beginPath();
+
+  values.forEach((v,i)=>{
+
+    const x=values.length===1
+      ?left
+      :left+(right-left)*i/(values.length-1);
+
+    const y=bottom-
+      (v-low)/(high-low)*(bottom-top);
+
+    if(i===0)ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+
+  });
+
+  ctx.stroke();
+
+  ctx.fillStyle="#94a3b8";
+
+  ctx.fillText("Older",left,181);
+
+  ctx.fillText(
+    "Latest",
+    Math.max(left,right-35),
+    181
+  );
+}
+
+function refreshGraphs() {
+
+  drawGraph(
+    "tempGraph",
+    tempHistory,
+    "#38bdf8"
+  );
+
+  drawGraph(
+    "humGraph",
+    humHistory,
+    "#4ade80"
+  );
+}
+
+async function updateDashboard() {
+
+  try {
+
+    const response=await fetch(
+      "/data",
+      {cache:"no-store"}
+    );
+
+    if(!response.ok) {
+      throw new Error("HTTP error");
+    }
+
+    const d=await response.json();
+
+    document.getElementById("temp").innerText=
+      fmt(d.temperature," °C");
+
+    document.getElementById("hum").innerText=
+      fmt(d.humidity," %");
+
+    document.getElementById("comfort").innerText=
+      d.comfort;
+
+    document.getElementById("alert").innerText=
+      d.alert?"HIGH TEMP":"NORMAL";
+
+    document.getElementById("alert").style.color=
+      d.alert?"#f87171":"#4ade80";
+
+    document.getElementById("minTemp").innerText=
+      fmt(d.minTemp," °C");
+
+    document.getElementById("maxTemp").innerText=
+      fmt(d.maxTemp," °C");
+
+    document.getElementById("minHum").innerText=
+      fmt(d.minHum," %");
+
+    document.getElementById("maxHum").innerText=
+      fmt(d.maxHum," %");
+
+    document.getElementById("uptime").innerText=
+      Math.floor(d.uptime/60)+" minutes";
+
+    document.getElementById("warning").style.display=
+      d.alert?"block":"none";
+
+    document.getElementById("error").style.display=
+      d.sensorOK?"none":"block";
+
+    document.getElementById("connection").innerText=
+      "Connected";
+
+    // Save valid readings in browser memory
+    if(d.sensorOK &&
+       d.temperature!==null &&
+       d.humidity!==null) {
+
+      const timestamp=new Date().toISOString();
+
+      tempHistory.push(d.temperature);
+      humHistory.push(d.humidity);
+
+      records.push([
+        timestamp,
+        d.temperature,
+        d.humidity,
+        d.comfort,
+        d.alert?"ALERT":"NORMAL"
+      ]);
+
+      if(tempHistory.length>MAX_POINTS)
+        tempHistory.shift();
+
+      if(humHistory.length>MAX_POINTS)
+        humHistory.shift();
+    }
+
+    refreshGraphs();
+
+  } catch(error) {
+
+    document.getElementById("connection").innerText=
+      "ESP32 connection lost";
+  }
+}
+
+function downloadCSV() {
+
+  let csv=
+    "Timestamp,Temperature_C,Humidity_Percent,Comfort,Alert\n";
+
+  records.forEach(row=>{
+    csv+=row.join(",")+"\n";
+  });
+
+  const blob=new Blob(
+    [csv],
+    {type:"text/csv;charset=utf-8"}
+  );
+
+  const url=URL.createObjectURL(blob);
+
+  const a=document.createElement("a");
+
+  a.href=url;
+  a.download="ENVIGUARD_X_Readings.csv";
+
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+window.addEventListener(
+  "resize",
+  refreshGraphs
+);
+
+updateDashboard();
+
+// Poll every 2.5 seconds
+setInterval(updateDashboard,2500);
+
+</script>
+</body>
+</html>
